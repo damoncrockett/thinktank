@@ -1,3 +1,17 @@
 .env
 readers
 agents
+
+.DS_Store
+dist
+
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+.gitattributes
+
+.editorconfig
