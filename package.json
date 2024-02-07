@@ -28,6 +28,8 @@
   },
   "dependencies": {
     "@xenova/transformers": "^2.15.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
     "ml-pca": "^4.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

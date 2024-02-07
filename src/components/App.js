@@ -1,57 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { pipeline } from '@xenova/transformers';
 import { PCA } from 'ml-pca';
+import { normalizeCoordinates, toScreenCoordinates } from '../../utils/coords';
+import { select } from 'd3-selection';
 
 const generator = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat');
-const prompt = "Return a single word that captures the main subject matter of the following passage. Make sure your answer a single word and nothing else: ";
-
-// Create a feature extraction pipeline
 const embedder = await pipeline('feature-extraction', 'nomic-ai/nomic-embed-text-v1');
-
-function normalizeCoordinates(pcaCoordinates) {
-    // Find min and max for both axes
-    const xValues = pcaCoordinates.map(coord => coord[0]);
-    const yValues = pcaCoordinates.map(coord => coord[1]);
-    const xMin = Math.min(...xValues);
-    const xMax = Math.max(...xValues);
-    const yMin = Math.min(...yValues);
-    const yMax = Math.max(...yValues);
-
-    // Normalize coordinates to [0, 1]
-    return pcaCoordinates.map(([x, y]) => [
-        (x - xMin) / (xMax - xMin),
-        (y - yMin) / (yMax - yMin)
-    ]);
-}
-
-function toScreenCoordinates(normalizedCoordinates, screenWidth, screenHeight, padding = 40) { // Increased padding value
-    // Define a drawable area reduced by padding
-    const drawableWidth = screenWidth - 2 * padding;
-    const drawableHeight = screenHeight - 2 * padding;
-
-    // Apply further scaling to ensure no element is right on the edge
-    const scaleMargin = padding; // Further reduce drawable area on each side
-
-    return normalizedCoordinates.map(([x, y]) => {
-        // Scale x and y to the drawable area with margins considered
-        const left = (x * (drawableWidth - 2 * scaleMargin)) + padding + scaleMargin;
-        const top = (y * (drawableHeight - 2 * scaleMargin)) + padding + scaleMargin;
-
-        return { left, top };
-    });
-}
+const prompt = "Return a single word that captures the main subject matter of the following passage. Make sure your answer a single word and nothing else: ";
 
 export default function App() {
     const [passage, setPassage] = useState('');
     const [summaries, setSummaries] = useState([]);
     const [embeddings, setEmbeddings] = useState([]);
     const [summaryCoords, setSummaryCoords] = useState([]);
-    const [clickCount, setClickCount] = useState(0);
     const inputRef = useRef();
+    const svgRef = useRef();
+
+    function handleKeyDown(event) {
+        if (event.key === 'Enter') {
+            handleButtonClick(); // Call the function to handle submission
+        }
+    }
 
     const handleButtonClick = () => {
         setPassage(inputRef.current.value);
-        setClickCount(clickCount + 1);
     };
 
     useEffect(() => {
@@ -86,7 +58,7 @@ export default function App() {
             const pcaEmbeddings = fitPCA.predict(twoDimArrays)["data"].map(d => Array.from(d.slice(0, 2)));
     
             const normalizedCoordinates = normalizeCoordinates(pcaEmbeddings);
-            const screenCoords = toScreenCoordinates(normalizedCoordinates, window.innerWidth, window.innerHeight);
+            const screenCoords = toScreenCoordinates(normalizedCoordinates, svgRef.current.clientWidth, svgRef.current.clientHeight, 100);
     
             // Update states together to ensure they are synchronized
             setSummaries(prevSummaries => [...prevSummaries, response]);
@@ -95,43 +67,56 @@ export default function App() {
         }
     
         processInput();
-    }, [clickCount, passage]);
+    }, [passage]);
+
+    useEffect(() => {
+        if ( summaryCoords.length === 0 ) return;
     
-   
+        const svg = select(svgRef.current);
+        svg.selectAll("*").remove(); // Clear previous SVG elements
+    
+        const padding = 10; // Padding inside the rectangle
+    
+        // Append groups for each summary
+        const summariesGroup = svg.selectAll('g')
+            .data(summaryCoords)
+            .enter()
+            .append('g'); // Group for each summary for easier positioning
+    
+        // First, append text elements permanently
+        summariesGroup.append('text')
+            .text((d, i) => summaries[i])
+            .attr('x', d => d.left ? d.left + padding : 200 + padding)
+            .attr('y', d => d.top ? d.top + 20 : 200 + 20) // Center text vertically
+            .attr('dominant-baseline', 'middle')
+            .style('font-size', '12px')
+            .each(function(d, i) {
+                const textWidth = this.getComputedTextLength();
+                const rectWidth = textWidth + 2 * padding; // Calculate rectangle width based on text width
+    
+                // Append a rectangle for each text, inserting it before the text element
+                select(this.parentNode).insert('rect', 'text')
+                    .attr('x', d.left ? d.left : 200)
+                    .attr('y', d.top ? d.top : 200)
+                    .attr('width', rectWidth)
+                    .attr('height', 40) // Fixed height, adjust as needed
+                    .attr('rx', 10) // Rounded corners
+                    .attr('ry', 10)
+                    .style('fill', 'aquamarine');
+            });
+
+            inputRef.current.value = '';
+    
+    }, [summaryCoords]);
+    
     return (
-        <div>
-            <input ref={inputRef} />
-            <button onClick={handleButtonClick}>SUMMARIZE</button>
-            <div className='responseBlock'>
-                {summaryCoords[0]?.left ? 
-                summaries.map((s, i) => (
-                    <div 
-                        key={i} 
-                        className='summary' 
-                        style={{
-                            position: 'fixed',
-                            left: `${summaryCoords[i].left}px`,
-                            top: `${summaryCoords[i].top}px`
-                        }}
-                    >
-                        {s}
-                    </div>
-                )) : 
-                summaries.map((s, i) => (
-                    <div 
-                        key={i} 
-                        className='summary' 
-                        style={{
-                            position: 'fixed',
-                            left: '40%',
-                            top: '40%'
-                        }}
-                    >
-                        {s}
-                    </div>
-                ))
-            }
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+            <div style={{ marginBottom: '10px' }}> {/* Ensure this div doesn't grow and only takes necessary space */}
+                <input ref={inputRef} onKeyDown={handleKeyDown} />
+                <button onClick={handleButtonClick}>SUMMARIZE</button>
             </div>
+            <svg ref={svgRef} style={{ flexGrow: 1 }} width="100%" height="100%"></svg>
         </div>
     );
+    
 }
