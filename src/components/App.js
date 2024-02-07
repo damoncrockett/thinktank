@@ -4,9 +4,37 @@ import { PCA } from 'ml-pca';
 import { normalizeCoordinates, toScreenCoordinates } from '../../utils/coords';
 import { select } from 'd3-selection';
 
-const generator = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat');
+// const generator = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat');
 const embedder = await pipeline('feature-extraction', 'nomic-ai/nomic-embed-text-v1');
-const prompt = "Return a single word that captures the main subject matter of the following passage. Make sure your answer a single word and nothing else: ";
+// const prompt = "Return a single word that captures the main subject matter of the following passage. Make sure your answer a single word and nothing else: ";
+
+const stopWords = new Set([
+    "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
+    "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers",
+    "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
+    "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are",
+    "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does",
+    "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until",
+    "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
+    "through", "during", "before", "after", "above", "below", "to", "from", "up", "down",
+    "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here",
+    "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
+    "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"
+]);
+
+const chooseThreeMostImportantWords = (text) => {
+    const words = text.toLowerCase().split(/\s+/);
+    const wordCounts = new Map();
+    for (const word of words) {
+        if (stopWords.has(word)) continue;
+        wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
+    }
+    const sortedWords = Array.from(wordCounts.entries()).sort((a, b) => b[1] - a[1]);
+    const topThree = sortedWords.slice(0, 3).map(([word]) => word);
+
+    return topThree.join(' '); 
+}
 
 export default function App() {
     const [passage, setPassage] = useState('');
@@ -30,27 +58,28 @@ export default function App() {
         async function processInput() {
             if (!passage) return; // Exit early if there's no passage to process
     
-            const text = generator.tokenizer.apply_chat_template([
-                { "role": "system", "content": "You are a helpful assistant." },
-                { "role": "user", "content": prompt + passage }
-            ], {
-                tokenize: false,
-                add_generation_prompt: true,
-            });
+            // const text = generator.tokenizer.apply_chat_template([
+            //     { "role": "system", "content": "You are a helpful assistant." },
+            //     { "role": "user", "content": prompt + passage }
+            // ], {
+            //     tokenize: false,
+            //     add_generation_prompt: true,
+            // });
     
-            const output = await generator(text, {
-                max_new_tokens: 128,
-                do_sample: false,
-            });
+            // const output = await generator(text, {
+            //     max_new_tokens: 128,
+            //     do_sample: false,
+            // });
     
-            const response = output[0].generated_text.split(/\r?\n/).pop().split(" ").pop().replace(/['".]+/g, '');
+            // const response = output[0].generated_text.split(/\r?\n/).pop().split(" ").pop().replace(/['".]+/g, '');
     
             // Check if lastSummary is already processed to avoid re-processing
-            if (summaries.length > 0 && summaries[summaries.length - 1] === response) {
-                return;
-            }
+            // if (summaries.length > 0 && summaries[summaries.length - 1] === response) {
+            //     return;
+            // }
     
-            const embedding = await embedder(response, { pooling: 'mean', normalize: true });
+            // const embedding = await embedder(response, { pooling: 'mean', normalize: true });
+            const embedding = await embedder(passage, { pooling: 'mean', normalize: true });
             const newEmbeddings = [...embeddings, embedding["data"]]; // Temporary variable to hold new state
     
             const twoDimArrays = newEmbeddings.map(d => Array.from(d));
@@ -61,7 +90,7 @@ export default function App() {
             const screenCoords = toScreenCoordinates(normalizedCoordinates, svgRef.current.clientWidth, svgRef.current.clientHeight, 100);
     
             // Update states together to ensure they are synchronized
-            setSummaries(prevSummaries => [...prevSummaries, response]);
+            setSummaries(prevSummaries => [...prevSummaries, chooseThreeMostImportantWords(passage)]);
             setEmbeddings(newEmbeddings); 
             setSummaryCoords(screenCoords); 
         }
