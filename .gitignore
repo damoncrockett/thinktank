@@ -15,3 +15,5 @@ dist
 .gitattributes
 
 .editorconfig
+
+schnitt.js
