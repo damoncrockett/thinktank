@@ -55,10 +55,19 @@ export default function App() {
         if (summaryCoords.length === 0) return;
     
         const svg = select(svgRef.current);
+
+        const simulation = forceSimulation(summaryCoords)
+            .force("charge", forceManyBody().strength(-10))
+            .force("x", forceX(d => d.x).strength(0.5))
+            .force("y", forceY(d => d.y).strength(0.5))
+            .force("collide", forceCollide().radius(20).strength(0.5))
+            .stop();
+
+        // Manually run the simulation for a set number of ticks
+        for (let i = 0; i < 10; i++) simulation.tick();
+
         // Transition duration in milliseconds
         const duration = 750;
-
-        const padding = 10; // Padding around text inside the rectangle
     
         // Update pattern: Bind data to groups, handling entering (new) and updating (existing) elements
         let summariesGroup = svg.selectAll('g')
@@ -72,17 +81,16 @@ export default function App() {
         enterGroup.append('rect')
             .attr('width', 100) // Initial width, adjust based on expected text width
             .attr('height', 40) // Fixed height
-            .attr('rx', 10) // Rounded corners
-            .attr('ry', 10)
-            .style('fill', 'cornflowerblue')
-            .style('stroke', 'black') // Set the border color to black
-            .style('stroke-width', '1px'); // Set the border thickness to 1px
+            .attr('rx', 20) // Rounded corners
+            .attr('ry', 20)
+
+        const padding = 10;
     
         enterGroup.append('text')
             .attr('x', padding)
             .attr('y', 20) // Center text vertically
             .attr('dominant-baseline', 'middle')
-            .style('fill', 'white')
+            .style('fill', 'black')
             .text((_, i) => summaries[i]);
     
         // Merge entering elements with updating ones to apply transitions
